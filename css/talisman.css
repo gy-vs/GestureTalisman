@@ -1,0 +1,294 @@
+/* ============================================
+   通天箓 - 符箓样式表
+   ============================================ */
+
+/* Talisman Ring Container */
+.talisman-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 700px;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    z-index: var(--z-talisman);
+}
+
+/* Individual Talisman Card */
+.talisman-card {
+    position: relative;
+    width: 70px;
+    height: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-xs);
+    background: rgba(26, 26, 46, 0.9);
+    border: 2px solid;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.3s var(--ease-smooth);
+    flex-shrink: 0;
+}
+
+.talisman-card::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--radius-md);
+    background: inherit;
+    filter: blur(10px);
+    opacity: 0.5;
+    z-index: -1;
+}
+
+/* Talisman Types */
+.talisman-card[data-element="fire"] {
+    border-color: var(--color-fire);
+    box-shadow: 0 0 20px rgba(255, 69, 0, 0.3);
+}
+
+.talisman-card[data-element="water"] {
+    border-color: var(--color-water);
+    box-shadow: 0 0 20px rgba(0, 191, 255, 0.3);
+}
+
+.talisman-card[data-element="wood"] {
+    border-color: var(--color-wood);
+    box-shadow: 0 0 20px rgba(50, 205, 50, 0.3);
+}
+
+.talisman-card[data-element="metal"] {
+    border-color: var(--color-metal);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+}
+
+.talisman-card[data-element="earth"] {
+    border-color: var(--color-earth);
+    box-shadow: 0 0 20px rgba(205, 133, 63, 0.3);
+}
+
+.talisman-card[data-element="ice"] {
+    border-color: var(--color-ice);
+    box-shadow: 0 0 20px rgba(224, 255, 255, 0.3);
+}
+
+.talisman-card[data-element="thunder"] {
+    border-color: var(--color-thunder);
+    box-shadow: 0 0 20px rgba(148, 0, 211, 0.3);
+}
+
+.talisman-card[data-element="wind"] {
+    border-color: var(--color-wind);
+    box-shadow: 0 0 20px rgba(255, 182, 193, 0.3);
+}
+
+/* Talisman States */
+.talisman-card.idle {
+    opacity: 0.7;
+}
+
+.talisman-card.hover {
+    opacity: 1;
+    transform: scale(1.1);
+    border-width: 3px;
+}
+
+.talisman-card.selected {
+    opacity: 1;
+    transform: scale(1.2);
+    animation: pulse-glow 1s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 20px currentColor;
+    }
+    50% {
+        box-shadow: 0 0 40px currentColor, 0 0 60px currentColor;
+    }
+}
+
+/* Talisman Symbol */
+.talisman-card__symbol {
+    font-size: 32px;
+    line-height: 1;
+}
+
+.talisman-card__name {
+    font-size: 12px;
+    font-weight: 600;
+    color: inherit;
+    text-shadow: 0 0 10px currentColor;
+}
+
+/* Float Animation with Stagger */
+/* Float animation - uses margin instead of transform to avoid conflicts */
+@keyframes float {
+    0%, 100% {
+        margin-top: 0;
+    }
+    50% {
+        margin-top: -8px;
+    }
+}
+
+.talisman-ring.active .talisman-card {
+    animation: float 3s ease-in-out infinite;
+}
+
+.talisman-ring.active .talisman-card:nth-child(1) { animation-delay: 0s; }
+.talisman-ring.active .talisman-card:nth-child(2) { animation-delay: 0.2s; }
+.talisman-ring.active .talisman-card:nth-child(3) { animation-delay: 0.4s; }
+.talisman-ring.active .talisman-card:nth-child(4) { animation-delay: 0.6s; }
+.talisman-ring.active .talisman-card:nth-child(5) { animation-delay: 0.8s; }
+.talisman-ring.active .talisman-card:nth-child(6) { animation-delay: 1.0s; }
+.talisman-ring.active .talisman-card:nth-child(7) { animation-delay: 1.2s; }
+.talisman-ring.active .talisman-card:nth-child(8) { animation-delay: 1.4s; }
+
+/* Talisman Zoom View */
+.talisman-zoom {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: var(--z-talisman-zoom);
+    animation: zoomIn 0.3s var(--ease-elastic);
+}
+
+@keyframes zoomIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+.talisman-zoom__card {
+    position: relative;
+    width: 200px;
+    height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-lg);
+    background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(10, 10, 21, 0.95) 100%);
+    border: 3px solid var(--color-gold);
+    border-radius: var(--radius-lg);
+    box-shadow: 
+        0 0 40px rgba(255, 215, 0, 0.4),
+        inset 0 0 60px rgba(255, 215, 0, 0.1);
+}
+
+.talisman-zoom__glow {
+    position: absolute;
+    inset: -20px;
+    background: radial-gradient(circle, rgba(255, 215, 0, 0.3) 0%, transparent 70%);
+    border-radius: var(--radius-xl);
+    animation: glow-pulse 2s ease-in-out infinite;
+    z-index: -1;
+}
+
+@keyframes glow-pulse {
+    0%, 100% {
+        opacity: 0.5;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+.talisman-zoom__symbol {
+    font-size: 80px;
+    line-height: 1;
+    text-shadow: 0 0 30px currentColor;
+}
+
+.talisman-zoom__name {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-gold);
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+    letter-spacing: 4px;
+}
+
+/* Talisman Dissolve Animation */
+.talisman-dissolve {
+    animation: dissolve 0.8s var(--ease-out) forwards;
+}
+
+@keyframes dissolve {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        filter: blur(0);
+    }
+    50% {
+        opacity: 0.8;
+        transform: translate(-50%, -50%) scale(1.2);
+        filter: blur(2px);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1.5);
+        filter: blur(10px);
+    }
+}
+
+/* Talisman Symbols Unicode/Custom */
+.symbol-fire::before { content: '🔥'; }
+.symbol-water::before { content: '💧'; }
+.symbol-wood::before { content: '🌿'; }
+.symbol-metal::before { content: '⚡'; }
+.symbol-earth::before { content: '🌍'; }
+.symbol-ice::before { content: '❄️'; }
+.symbol-thunder::before { content: '💜'; }
+.symbol-wind::before { content: '🌸'; }
+
+/* Appear Animation */
+.talisman-ring.appearing .talisman-card {
+    animation: card-appear 0.5s var(--ease-elastic) forwards;
+    opacity: 0;
+}
+
+.talisman-ring.appearing .talisman-card:nth-child(1) { animation-delay: 0.0s; }
+.talisman-ring.appearing .talisman-card:nth-child(2) { animation-delay: 0.05s; }
+.talisman-ring.appearing .talisman-card:nth-child(3) { animation-delay: 0.1s; }
+.talisman-ring.appearing .talisman-card:nth-child(4) { animation-delay: 0.15s; }
+.talisman-ring.appearing .talisman-card:nth-child(5) { animation-delay: 0.2s; }
+.talisman-ring.appearing .talisman-card:nth-child(6) { animation-delay: 0.25s; }
+.talisman-ring.appearing .talisman-card:nth-child(7) { animation-delay: 0.3s; }
+.talisman-ring.appearing .talisman-card:nth-child(8) { animation-delay: 0.35s; }
+
+@keyframes card-appear {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.5);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Scatter Animation for Dismissal */
+.talisman-ring.scattering .talisman-card {
+    animation: card-scatter 0.6s var(--ease-in) forwards;
+}
+
+@keyframes card-scatter {
+    to {
+        opacity: 0;
+        transform: translateY(-50px) scale(0);
+    }
+}

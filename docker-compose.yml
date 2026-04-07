@@ -1,0 +1,20 @@
+services:
+  tongtianlu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tongtianlu-app
+    ports:
+      - "8088:80"
+    restart: unless-stopped
+    # Development mode: uncomment volumes below for live reload
+    # volumes:
+    #   - ./index.html:/usr/share/nginx/html/index.html:ro
+    #   - ./css:/usr/share/nginx/html/css:ro
+    #   - ./js:/usr/share/nginx/html/js:ro
+    #   - ./assets:/usr/share/nginx/html/assets:ro
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

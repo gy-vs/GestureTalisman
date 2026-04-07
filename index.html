@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通天箓 - 手势互动符箓系统</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Orbitron:wght@400;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe Hands (智能加载：检测本地模型，失败则用CDN) -->
+    <script>
+        window.MEDIAPIPE_LOCAL = false; // 默认使用CDN
+        window.MEDIAPIPE_LOADED = { hands: false, camera: false, drawing: false };
+        
+        // 动态加载脚本
+        function loadScript(localPath, cdnPath, key) {
+            return new Promise((resolve) => {
+                const script = document.createElement('script');
+                script.onload = function() {
+                    console.log('[MediaPipe] 加载成功:', localPath || cdnPath);
+                    if (localPath && !cdnPath) window.MEDIAPIPE_LOCAL = true;
+                    window.MEDIAPIPE_LOADED[key] = true;
+                    resolve(true);
+                };
+                script.onerror = function() {
+                    if (localPath && cdnPath) {
+                        console.log('[MediaPipe] 本地加载失败，尝试CDN:', cdnPath);
+                        script.src = cdnPath;
+                    } else {
+                        console.error('[MediaPipe] 加载失败:', localPath || cdnPath);
+                        resolve(false);
+                    }
+                };
+                script.src = localPath || cdnPath;
+                document.head.appendChild(script);
+            });
+        }
+        
+        // 按顺序加载 MediaPipe
+        (async function() {
+            await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js', 'hands');
+            await loadScript('/models/camera_utils/camera_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js', 'camera');
+            await loadScript('/models/drawing_utils/drawing_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js', 'drawing');
+            console.log('[MediaPipe] 所有脚本加载完成，本地模式:', window.MEDIAPIPE_LOCAL);
+        })();
+    </script>
+    
+    <!-- Stylesheets -->
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/talisman.css">
+    <link rel="stylesheet" href="css/effects.css">
+</head>
+<body>
+    <!-- 主容器 -->
+    <div id="app">
+        <!-- 顶部状态栏 -->
+        <header class="top-bar">
+            <div class="top-bar__left">
+                <span class="mode-indicator" id="modeIndicator">
+                    <span class="mode-dot"></span>
+                    <span class="mode-text">待机中</span>
+                </span>
+            </div>
+            <div class="top-bar__center">
+                <h1 class="app-title">通天箓</h1>
+            </div>
+            <div class="top-bar__right">
+                <button class="icon-btn" id="btnSimMode" title="模拟模式 (M)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="4" width="20" height="16" rx="2"/>
+                        <line x1="6" y1="12" x2="18" y2="12"/>
+                        <line x1="6" y1="16" x2="10" y2="16"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" id="btnDebug" title="调试面板 (D)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                        <path d="M2 17l10 5 10-5"/>
+                        <path d="M2 12l10 5 10-5"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" id="btnTutorial" title="教程 (T)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主画面区域 -->
+        <main class="main-stage">
+            <!-- 视频背景层 -->
+            <video id="videoInput" class="video-layer" autoplay playsinline></video>
+            
+            <!-- 手势骨架层 -->
+            <canvas id="skeletonCanvas" class="canvas-layer skeleton-layer"></canvas>
+            
+            <!-- 画符轨迹层 -->
+            <canvas id="drawingCanvas" class="canvas-layer drawing-layer"></canvas>
+            
+            <!-- 符箓层 -->
+            <canvas id="talismanCanvas" class="canvas-layer talisman-layer"></canvas>
+            
+            <!-- 特效层 -->
+            <canvas id="effectsCanvas" class="canvas-layer effects-layer"></canvas>
+
+            <!-- 符箓环绕容器 -->
+            <div id="talismanRing" class="talisman-ring hidden"></div>
+
+            <!-- 符箓放大视图 -->
+            <div id="talismanZoom" class="talisman-zoom hidden">
+                <div class="talisman-zoom__glow"></div>
+                <div class="talisman-zoom__card">
+                    <div id="zoomSymbol" class="talisman-zoom__symbol"></div>
+                    <div id="zoomName" class="talisman-zoom__name"></div>
+                </div>
+            </div>
+            
+            <!-- 摄像头未启用提示 -->
+            <div id="cameraPrompt" class="camera-prompt">
+                <div class="camera-prompt__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                </div>
+                <h2 class="camera-prompt__title">启动摄像头</h2>
+                <p class="camera-prompt__desc">请允许浏览器访问摄像头以开始体验</p>
+                <button class="btn-primary" id="btnStartCamera">
+                    <span>开始体验</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                </button>
+            </div>
+        </main>
+
+        <!-- 底部提示栏 -->
+        <footer class="bottom-bar">
+            <div class="hint-text" id="hintText">
+                <span class="hint-icon">👆</span>
+                <span>点击上方按钮启动摄像头</span>
+            </div>
+        </footer>
+
+        <!-- 调试面板 -->
+        <aside id="debugPanel" class="debug-panel hidden">
+            <div class="debug-panel__header">
+                <span class="debug-panel__title">🔧 Debug Panel</span>
+                <button class="debug-panel__close" id="btnCloseDebug">×</button>
+            </div>
+            <div class="debug-panel__content">
+                <div class="debug-row">
+                    <span class="debug-label">Hand Detected</span>
+                    <span class="debug-value" id="debugHandDetected">❌</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Gesture</span>
+                    <span class="debug-value" id="debugGesture">-</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Confidence</span>
+                    <span class="debug-value" id="debugConfidence">0%</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Fingers</span>
+                    <span class="debug-value debug-fingers" id="debugFingers">-----</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">State</span>
+                    <span class="debug-value" id="debugState">IDLE</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Last Pattern</span>
+                    <span class="debug-value" id="debugPattern">-</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">FPS</span>
+                    <span class="debug-value" id="debugFPS">0</span>
+                </div>
+                <div class="debug-separator"></div>
+                <div class="debug-toggles">
+                    <label class="debug-toggle">
+                        <input type="checkbox" id="toggleSkeleton" checked>
+                        <span>显示骨架</span>
+                    </label>
+                    <label class="debug-toggle">
+                        <input type="checkbox" id="toggleTrail" checked>
+                        <span>显示轨迹</span>
+                    </label>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 教程面板 -->
+        <aside id="tutorialPanel" class="tutorial-panel hidden">
+            <div class="tutorial-panel__header">
+                <span class="tutorial-panel__title">📖 操作指南</span>
+                <button class="tutorial-panel__close" id="btnCloseTutorial">×</button>
+            </div>
+            <div class="tutorial-panel__content">
+                <div class="tutorial-section">
+                    <div class="tutorial-section__title">🖌️ 画符召唤</div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">👆</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">伸出食指画符</div>
+                            <div class="tutorial-step__desc">单指伸出，在空中画出图案</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🔥</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">△ 三角形向上 → 火符</div>
+                            <div class="tutorial-step__desc">从下往上画三角</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">💧</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">〰️ 波浪线 → 水符</div>
+                            <div class="tutorial-step__desc">横向画两个波浪</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🌿</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">Y 形向上 → 木符</div>
+                            <div class="tutorial-step__desc">画Y形树枝状</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">⚡</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">⚡ 闪电折线 → 金符</div>
+                            <div class="tutorial-step__desc">从上往下画Z字闪电</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🌍</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">□ 正方形 → 土符</div>
+                            <div class="tutorial-step__desc">画一个闭合正方形</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">❄️</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">⬡ 六边形 → 冰符</div>
+                            <div class="tutorial-step__desc">画一个闭合六边形</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">💜</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">⚡⚡ 双折线 → 雷符</div>
+                            <div class="tutorial-step__desc">画连续的双闪电</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🌸</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">🌀 螺旋线 → 风符</div>
+                            <div class="tutorial-step__desc">从中心向外画螺旋</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tutorial-section">
+                    <div class="tutorial-section__title">🤚 手势召唤 (持续2秒)</div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">✌️</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">比耶 → 🔥 火符</div>
+                            <div class="tutorial-step__desc">食指+中指伸展</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🤙</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">比6 → ❄️ 冰符</div>
+                            <div class="tutorial-step__desc">拇指+小指伸展</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">👌</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">OK → 💧 水符</div>
+                            <div class="tutorial-step__desc">拇指食指圈起</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🤟</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">摇滚 → 💜 雷符</div>
+                            <div class="tutorial-step__desc">拇指+食指+小指</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">👍</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">点赞 → 🌸 风符</div>
+                            <div class="tutorial-step__desc">仅拇指伸展</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">✊</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">握拳 → 🌍 土符</div>
+                            <div class="tutorial-step__desc">全部手指弯曲</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🌿</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">三指 → 🌿 木符</div>
+                            <div class="tutorial-step__desc">食指+中指+无名指</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tutorial-section">
+                    <div class="tutorial-section__title">🖐️ 符箓环绕</div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🖐️</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">手掌摊开 1.5秒 → 浮现符箓环绕</div>
+                            <div class="tutorial-step__desc">五指张开保持，进入选择模式</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">👆</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">伸出食指 → 对准符箓选中</div>
+                            <div class="tutorial-step__desc">选择模式下仅响应指向和捏合</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🤏</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">捏合 → 提取放大符箓</div>
+                            <div class="tutorial-step__desc">拇指食指捏合选中的符箓</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🖐️</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">再次张开 → 符箓飘散生效</div>
+                            <div class="tutorial-step__desc">张开手掌激活提取的符箓</div>
+                        </div>
+                    </div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">👋</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">招招手 → 退出符箓环绕</div>
+                            <div class="tutorial-step__desc">左右快速晃动手掌取消</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tutorial-section">
+                    <div class="tutorial-section__title">⌨️ 模拟模式快捷键</div>
+                    <div class="tutorial-hint">按 M 开启 | 鼠标拖拽画符 | 数字键1-8直接召唤</div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 模拟模式提示 -->
+        <div id="simModeIndicator" class="sim-mode-indicator hidden">
+            <span class="sim-mode-badge">模拟模式</span>
+            <span class="sim-mode-hint">鼠标拖拽画符 | 数字键1-8召唤符箓 | 9符箓环绕</span>
+        </div>
+
+        <!-- 全屏特效容器 -->
+        <div id="fullscreenEffect" class="fullscreen-effect hidden"></div>
+
+        <!-- 加载遮罩 -->
+        <div id="loadingOverlay" class="loading-overlay hidden">
+            <div class="loading-content">
+                <div class="loading-spinner">
+                    <svg viewBox="0 0 120 120" class="loading-ring-svg">
+                        <defs>
+                            <linearGradient id="loadGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#FFD700"/>
+                                <stop offset="50%" stop-color="#00D4FF"/>
+                                <stop offset="100%" stop-color="#FFD700"/>
+                            </linearGradient>
+                        </defs>
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="4"/>
+                        <circle cx="60" cy="60" r="50" fill="none" stroke="url(#loadGrad)" stroke-width="4"
+                                stroke-linecap="round" stroke-dasharray="80 234" class="loading-arc"/>
+                    </svg>
+                    <div class="loading-symbol">箓</div>
+                </div>
+                <div class="loading-text" id="loadingText">正在加载手势识别模型...</div>
+                <div class="loading-sub">首次加载可能需要数秒</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/camera.js"></script>
+    <script src="js/handTracker.js"></script>
+    <script src="js/gestureRecognizer.js"></script>
+    <script src="js/drawingCanvas.js"></script>
+    <script src="js/patternMatcher.js"></script>
+    <script src="js/particleEngine.js"></script>
+    <script src="js/effectsManager.js"></script>
+    <script src="js/debugPanel.js"></script>
+    <script src="js/talismanSystem.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
