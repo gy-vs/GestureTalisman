@@ -99,7 +99,12 @@ class TongTianLuApp {
         this.gestureRecognizer.onGestureTrigger((gesture, talisman) => {
             this.handleGestureTrigger(gesture, talisman);
         });
-        
+
+        // 设置双手合十检测回调
+        this.gestureRecognizer.onPrayerGesture(() => {
+            this.handlePrayerGesture();
+        });
+
         // 创建进度环
         this.createProgressRing();
         
@@ -272,7 +277,7 @@ class TongTianLuApp {
             
             this.startMainLoop();
             this.setState(this.STATE.READY);
-            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
             
             overlay.classList.add('fade-away');
             setTimeout(() => {
@@ -358,30 +363,42 @@ class TongTianLuApp {
      * 处理手部识别结果
      */
     processHandResults(results) {
-        const { landmarks, hasHand } = results;
-        
+        const { landmarks, hasHand, multiHandLandmarks, handCount } = results;
+
         // 绘制骨架
         if (hasHand && this.debugPanel.shouldShowSkeleton()) {
             this.drawSkeleton(landmarks);
         } else {
             this.skeletonCtx.clearRect(0, 0, this.skeletonCanvas.width, this.skeletonCanvas.height);
         }
-        
-        // 识别手势
+
+        // 识别手势（主手）
         const gestureResult = this.gestureRecognizer.recognize(landmarks);
-        
+
+        // 检测双手合十（需要两只手）
+        let prayerProgress = 0;
+        if (handCount >= 2 && multiHandLandmarks) {
+            const { left, right } = this.handTracker.getLeftRightHands();
+            if (left && right) {
+                this.gestureRecognizer.detectPrayerGesture(left, right);
+                prayerProgress = this.gestureRecognizer.getPrayerHoldProgress();
+            }
+        }
+
         // 更新调试面板
         this.debugPanel.update({
             hasHand: hasHand,
             gesture: this.gestureRecognizer.getGestureName(gestureResult.gesture),
             confidence: gestureResult.confidence,
             fingerStates: gestureResult.fingerStates,
-            state: this.currentState
+            state: this.currentState,
+            handCount: handCount,
+            prayerProgress: prayerProgress
         });
-        
+
         // 处理手势
         if (hasHand) {
-            this.handleGesture(gestureResult, landmarks);
+            this.handleGesture(gestureResult, landmarks, prayerProgress);
         } else {
             this.handleNoHand();
         }
@@ -442,23 +459,26 @@ class TongTianLuApp {
     /**
      * 处理手势
      */
-    handleGesture(gestureResult, landmarks) {
+    handleGesture(gestureResult, landmarks, prayerProgress = 0) {
         const { gesture, holdProgress } = gestureResult;
         const GESTURES = this.gestureRecognizer.GESTURES;
         const indexTip = landmarks[8];
         const palmCenter = landmarks[0];
-        
+
         const screenX = (1 - palmCenter.x) * this.skeletonCanvas.width;
         const screenY = palmCenter.y * this.skeletonCanvas.height;
 
-        if (this.currentState === this.STATE.TALISMAN_RING || 
-            this.currentState === this.STATE.TALISMAN_PICKED) {
+        // 显示双手合十进度
+        if (prayerProgress > 0 && prayerProgress < 1) {
+            this.updateProgressRing(prayerProgress, 'prayer', screenX, screenY);
+        } else if (this.currentState === this.STATE.TALISMAN_RING ||
+                   this.currentState === this.STATE.TALISMAN_PICKED) {
             this.updateProgressRing(0);
         } else if (this.currentState === this.STATE.READY && gesture === GESTURES.OPEN_PALM) {
             const palmProgress = this._getPalmHoldProgress();
             this.updateProgressRing(palmProgress, gesture, screenX, screenY);
-        } else if (this.currentState === this.STATE.READY && 
-            gesture !== GESTURES.POINTING && 
+        } else if (this.currentState === this.STATE.READY &&
+            gesture !== GESTURES.POINTING &&
             gesture !== GESTURES.NONE &&
             gesture !== GESTURES.PINCH) {
             this.updateProgressRing(holdProgress, gesture, screenX, screenY);
@@ -470,22 +490,47 @@ class TongTianLuApp {
             case this.STATE.READY:
                 this.handleReadyState(gesture, indexTip, landmarks);
                 break;
-                
+
             case this.STATE.DRAWING:
                 this.handleDrawingState(gesture, indexTip);
                 break;
-                
+
             case this.STATE.TALISMAN_RING:
                 this.handleTalismanRingState(gesture, indexTip, landmarks);
                 break;
-                
+
             case this.STATE.TALISMAN_PICKED:
                 this.handleTalismanPickedState(gesture);
                 break;
-                
+
             case this.STATE.CASTING:
                 break;
         }
+    }
+
+    /**
+     * 处理双手合十手势 - 触发净化特效
+     */
+    handlePrayerGesture() {
+        console.log('[App] 双手合十检测成功，触发净化特效');
+
+        // 震动反馈
+        if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]);
+        }
+
+        // 播放净化特效
+        this.effectsManager.playPurificationEffect();
+
+        // 显示提示
+        this.updateHint('🙏 净化之力已释放');
+
+        // 3秒后恢复提示
+        setTimeout(() => {
+            if (this.currentState === this.STATE.READY) {
+                this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
+            }
+        }, 3000);
     }
 
     _getPalmHoldProgress() {
@@ -512,13 +557,6 @@ class TongTianLuApp {
         }
     }
 
-    showTalismanRing() {
-        this.setState(this.STATE.TALISMAN_RING);
-        this.talismanSystem.show();
-        this.updateProgressRing(0);
-        this.updateHint('👆 指向符箓 → 🤏 捏合提取 | 👋 招手退出');
-    }
-
     handleTalismanRingState(gesture, indexTip, landmarks) {
         const GESTURES = this.gestureRecognizer.GESTURES;
         this.gestureRecognizer.resetHoldTimer();
@@ -526,7 +564,7 @@ class TongTianLuApp {
         if (gesture === GESTURES.WAVE) {
             this.talismanSystem.cancel();
             this.setState(this.STATE.READY);
-            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
             return;
         }
 
@@ -552,7 +590,7 @@ class TongTianLuApp {
         if (gesture === GESTURES.WAVE) {
             this.talismanSystem.cancel();
             this.setState(this.STATE.READY);
-            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
         } else if (gesture === GESTURES.OPEN_PALM) {
             const talisman = this.talismanSystem.activatePicked();
             if (talisman) {
@@ -711,7 +749,7 @@ class TongTianLuApp {
                 // 恢复就绪状态
                 setTimeout(() => {
                     this.setState(this.STATE.READY);
-                    this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+                    this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
                 }, 2500);
             }, 600);
         }, 800);
@@ -820,11 +858,11 @@ class TongTianLuApp {
         } else if (this.currentState === this.STATE.TALISMAN_RING) {
             this.talismanSystem.cancel();
             this.setState(this.STATE.READY);
-            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
         } else if (this.currentState === this.STATE.TALISMAN_PICKED) {
             this.talismanSystem.cancel();
             this.setState(this.STATE.READY);
-            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕');
+            this.updateHint('👆 单指画符 | ✌️ 比耶→火符 | 🖐️ 张开手掌→符箓环绕 | 🙏 双手合十→净化');
         }
     }
 
@@ -874,6 +912,16 @@ class TongTianLuApp {
             this.simModeIndicator.classList.add('hidden');
             this.btnSimMode.classList.remove('active');
         }
+    }
+
+    /**
+     * 显示符箓环绕
+     */
+    showTalismanRing() {
+        this.setState(this.STATE.TALISMAN_RING);
+        this.talismanSystem.show();
+        this.updateProgressRing(0);
+        this.updateHint('👆 指向符箓 → 🤏 捏合提取 | 👋 招手退出');
     }
 
     handleKeyDown(e) {
