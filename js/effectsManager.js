@@ -20,11 +20,49 @@ class EffectsManager {
             crack: this.createCrackSVG(),
             icicle: this.createIcicleSVG(),
             petal: this.createPetalSVG(),
-            ripple: this.createRippleSVG()
+            ripple: this.createRippleSVG(),
+            beam: this.createBeamSVG()
         };
     }
 
     // ==================== SVG 素材生成 ====================
+
+    createBeamSVG() {
+        return `<svg viewBox="0 0 100 400" class="beam-svg">
+            <defs>
+                <linearGradient id="beamGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+                    <stop offset="0%" style="stop-color:#FFFFFF"/>
+                    <stop offset="30%" style="stop-color:#F0F8FF"/>
+                    <stop offset="60%" style="stop-color:#E6E6FA"/>
+                    <stop offset="100%" style="stop-color:rgba(255,255,255,0)"/>
+                </linearGradient>
+                <linearGradient id="beamGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" style="stop-color:rgba(255,255,255,0)"/>
+                    <stop offset="30%" style="stop-color:rgba(255,255,255,0.8)"/>
+                    <stop offset="70%" style="stop-color:rgba(255,255,255,0.8)"/>
+                    <stop offset="100%" style="stop-color:rgba(255,255,255,0)"/>
+                </linearGradient>
+                <filter id="beamGlow">
+                    <feGaussianBlur stdDeviation="8" result="blur"/>
+                    <feMerge>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+                <filter id="beamGlowSoft">
+                    <feGaussianBlur stdDeviation="4" result="blur"/>
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+            </defs>
+            <!-- 主光柱 -->
+            <ellipse cx="50" cy="380" rx="45" ry="15" fill="url(#beamGrad2)" filter="url(#beamGlow)" opacity="0.6"/>
+            <rect x="15" y="20" width="70" height="360" fill="url(#beamGrad)" filter="url(#beamGlowSoft)"/>
+            <rect x="30" y="10" width="40" height="370" fill="rgba(255,255,255,0.9)" filter="url(#beamGlowSoft)"/>
+            <!-- 内芯高光 -->
+            <rect x="42" y="5" width="16" height="375" fill="#FFFFFF"/>
+        </svg>`;
+    }
     
     createVineSVG() {
         return `<svg viewBox="0 0 200 400" class="vine-svg">
@@ -265,6 +303,7 @@ class EffectsManager {
             case 'metal': this.playMetalEffect(); break;
             case 'earth': this.playEarthEffect(); break;
             case 'wind': this.playWindEffect(); break;
+            case 'purify': this.playPurifyEffect(); break;
             default: this.playDefaultEffect(element);
         }
     }
@@ -710,6 +749,62 @@ class EffectsManager {
                 }));
                 this.particleEngine.startAnimation();
             }, i * 100);
+        }
+    }
+
+    // ==================== ✨ 净化 - 圣光普照 ====================
+    playPurifyEffect() {
+        const beams = this.generatePurifyBeams();
+        
+        this.effectContainer.innerHTML = `
+            <div class="effect-purify-scene">
+                <div class="purify-light-overlay"></div>
+                <div class="purify-center-beam">${this.svgAssets.beam}</div>
+                <div class="purify-surround-beams">${beams}</div>
+                <div class="purify-energy-core"></div>
+                <div class="purify-expanding-ring"></div>
+            </div>
+        `;
+        this.effectContainer.className = 'fullscreen-effect active';
+
+        this.emitPurifyParticles();
+        this.scheduleCleanup(4500);
+    }
+
+    generatePurifyBeams() {
+        let html = '';
+        const beamCount = 7;
+        for (let i = 0; i < beamCount; i++) {
+            const x = 10 + (80 / (beamCount - 1)) * i;
+            const delay = i * 0.12;
+            const scale = 0.5 + Math.random() * 0.4;
+            html += `<div class="purify-beam" style="left:${x}%;transform:scaleY(${scale});animation-delay:${delay}s">${this.svgAssets.beam}</div>`;
+        }
+        return html;
+    }
+
+    emitPurifyParticles() {
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        
+        for (let i = 0; i < 40; i++) {
+            setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 100;
+                
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: centerX + Math.cos(angle) * dist,
+                    y: centerY + window.innerHeight * 0.3,
+                    vx: Math.cos(angle) * (1 + Math.random()),
+                    vy: -2 - Math.random() * 3,
+                    color: Math.random() > 0.5 ? '#FFFFFF' : '#F0F8FF',
+                    size: 3 + Math.random() * 4,
+                    gravity: -0.03,
+                    decay: 0.01,
+                    type: 'circle'
+                }));
+                this.particleEngine.startAnimation();
+            }, i * 50);
         }
     }
 

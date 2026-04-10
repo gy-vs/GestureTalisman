@@ -17,7 +17,8 @@ class GestureRecognizer {
             THREE: 'three',
             PINCH: 'pinch',
             THUMBS_UP: 'thumbs_up',
-            WAVE: 'wave'
+            WAVE: 'wave',
+            PRAYER: 'prayer'
         };
 
         this.GESTURE_TALISMAN_MAP = {
@@ -27,7 +28,8 @@ class GestureRecognizer {
             [this.GESTURES.ROCK]: { element: 'thunder', name: '雷符', symbol: '💜' },
             [this.GESTURES.THUMBS_UP]: { element: 'wind', name: '风符', symbol: '🌸' },
             [this.GESTURES.FIST]: { element: 'earth', name: '土符', symbol: '🌍' },
-            [this.GESTURES.THREE]: { element: 'wood', name: '木符', symbol: '🌿' }
+            [this.GESTURES.THREE]: { element: 'wood', name: '木符', symbol: '🌿' },
+            [this.GESTURES.PRAYER]: { element: 'purify', name: '净化光柱', symbol: '✨' }
         };
 
         // 当前状态
@@ -178,6 +180,81 @@ class GestureRecognizer {
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
+    normalize(v) {
+        const len = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+        if (len === 0) return { x: 0, y: 0, z: 0 };
+        return { x: v.x / len, y: v.y / len, z: v.z / len };
+    }
+
+    dot(v1, v2) {
+        return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+    }
+
+    computePalmNormal(hand) {
+        const wrist = hand[0];
+        const indexMcp = hand[5];
+        const pinkyMcp = hand[17];
+        
+        const v1 = {
+            x: indexMcp.x - wrist.x,
+            y: indexMcp.y - wrist.y,
+            z: (indexMcp.z || 0) - (wrist.z || 0)
+        };
+        const v2 = {
+            x: pinkyMcp.x - wrist.x,
+            y: pinkyMcp.y - wrist.y,
+            z: (pinkyMcp.z || 0) - (wrist.z || 0)
+        };
+        
+        const normal = {
+            x: v1.y * v2.z - v1.z * v2.y,
+            y: v1.z * v2.x - v1.x * v2.z,
+            z: v1.x * v2.y - v1.y * v2.x
+        };
+        
+        return this.normalize(normal);
+    }
+
+    isPrayerGesture(multiLandmarks) {
+        if (!multiLandmarks || multiLandmarks.length !== 2) return false;
+        
+        const hand1 = multiLandmarks[0];
+        const hand2 = multiLandmarks[1];
+        
+        if (hand1.length !== 21 || hand2.length !== 21) return false;
+        
+        const fingerTipIndices = [4, 8, 12, 16, 20];
+        let avgTipDistance = 0;
+        
+        for (const idx of fingerTipIndices) {
+            avgTipDistance += this.distance(hand1[idx], hand2[idx]);
+        }
+        avgTipDistance /= fingerTipIndices.length;
+        
+        const normal1 = this.computePalmNormal(hand1);
+        const normal2 = this.computePalmNormal(hand2);
+        const dotProduct = this.dot(normal1, normal2);
+        const angleRad = Math.acos(Math.max(-1, Math.min(1, dotProduct)));
+        const angleDeg = angleRad * 180 / Math.PI;
+        
+        const wristDistance = this.distance(hand1[0], hand2[0]);
+        
+        const distThreshold = 0.15;
+        const angleThreshold = 45;
+        const isCloseEnough = avgTipDistance < distThreshold && wristDistance < distThreshold * 1.5;
+        const isFacingEachOther = Math.abs(angleDeg) > (180 - angleThreshold) || Math.abs(angleDeg) < angleThreshold;
+        
+        const result = isCloseEnough && isFacingEachOther;
+        
+        if (result) {
+            console.log('[Prayer] 指尖距离:', avgTipDistance.toFixed(4), 
+                        '掌心夹角:', angleDeg.toFixed(1) + '°',
+                        '手腕距离:', wristDistance.toFixed(4));
+        }
+        
+        return result;
+    }
+
     /**
      * 更新手指状态
      */
@@ -291,7 +368,14 @@ class GestureRecognizer {
         return false;
     }
 
-    recognize(landmarks) {
+    recognize(landmarks, multiLandmarks) {
+        if (this.isPrayerGesture(multiLandmarks)) {
+            this.currentGesture = this.GESTURES.PRAYER;
+            this.confidence = 0.95;
+            this.updateHoldTimer(this.GESTURES.PRAYER);
+            return this.getResult();
+        }
+
         if (!landmarks || landmarks.length !== 21) {
             this.currentGesture = this.GESTURES.NONE;
             this.confidence = 0;
@@ -516,7 +600,8 @@ class GestureRecognizer {
             [this.GESTURES.THREE]: '🌿 三指',
             [this.GESTURES.PINCH]: '🤏 捏合',
             [this.GESTURES.THUMBS_UP]: '👍 点赞',
-            [this.GESTURES.WAVE]: '👋 招手'
+            [this.GESTURES.WAVE]: '👋 招手',
+            [this.GESTURES.PRAYER]: '🙏 双手合十'
         };
         return names[gesture] || '未知';
     }
