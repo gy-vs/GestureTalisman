@@ -16,32 +16,47 @@
         window.MEDIAPIPE_LOADED = { hands: false, camera: false, drawing: false };
         
         // 动态加载脚本
-        function loadScript(localPath, cdnPath, key) {
+        function loadScript(localPath, cdnPath, key, setLocalFlag = false) {
             return new Promise((resolve) => {
                 const script = document.createElement('script');
+                let loadedFromLocal = false;
+                
                 script.onload = function() {
-                    console.log('[MediaPipe] 加载成功:', localPath || cdnPath);
-                    if (localPath && !cdnPath) window.MEDIAPIPE_LOCAL = true;
+                    console.log('[MediaPipe] 加载成功:', loadedFromLocal ? localPath : cdnPath);
+                    // 如果是hands.js且从本地加载成功，设置全局标记
+                    if (setLocalFlag && loadedFromLocal) {
+                        window.MEDIAPIPE_LOCAL = true;
+                        console.log('[MediaPipe] 本地模式已激活:', window.MEDIAPIPE_LOCAL);
+                    }
                     window.MEDIAPIPE_LOADED[key] = true;
                     resolve(true);
                 };
                 script.onerror = function() {
-                    if (localPath && cdnPath) {
+                    if (!loadedFromLocal && cdnPath) {
                         console.log('[MediaPipe] 本地加载失败，尝试CDN:', cdnPath);
+                        loadedFromLocal = false;
                         script.src = cdnPath;
                     } else {
-                        console.error('[MediaPipe] 加载失败:', localPath || cdnPath);
+                        console.error('[MediaPipe] 加载失败:', loadedFromLocal ? localPath : cdnPath);
                         resolve(false);
                     }
                 };
-                script.src = localPath || cdnPath;
+                
+                if (localPath) {
+                    // 先尝试本地
+                    loadedFromLocal = true;
+                    script.src = localPath;
+                } else {
+                    script.src = cdnPath;
+                }
                 document.head.appendChild(script);
             });
         }
         
-        // 按顺序加载 MediaPipe
+        // 按顺序加载 MediaPipe (hands.js成功决定是否使用本地模型文件)
         (async function() {
-            await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js', 'hands');
+            // 只有hands.js的加载成功决定是否使用本地模型
+            await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js', 'hands', true);
             await loadScript('/models/camera_utils/camera_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js', 'camera');
             await loadScript('/models/drawing_utils/drawing_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js', 'drawing');
             console.log('[MediaPipe] 所有脚本加载完成，本地模式:', window.MEDIAPIPE_LOCAL);

@@ -259,6 +259,7 @@ class TongTianLuApp {
             await this.handTracker.warmup(this.camera.getVideoElement());
             
             // 设置结果回调
+            window.handTrackerInstance = this.handTracker;
             this.handTracker.setResultsCallback((results) => {
                 this.processHandResults(results);
             });
@@ -358,7 +359,7 @@ class TongTianLuApp {
      * 处理手部识别结果
      */
     processHandResults(results) {
-        const { landmarks, hasHand } = results;
+        const { landmarks, multiLandmarks, hasHand, handCount } = results;
         
         // 绘制骨架
         if (hasHand && this.debugPanel.shouldShowSkeleton()) {
@@ -367,8 +368,8 @@ class TongTianLuApp {
             this.skeletonCtx.clearRect(0, 0, this.skeletonCanvas.width, this.skeletonCanvas.height);
         }
         
-        // 识别手势
-        const gestureResult = this.gestureRecognizer.recognize(landmarks);
+        // 识别手势（传递双手数据）
+        const gestureResult = this.gestureRecognizer.recognize(landmarks, multiLandmarks);
         
         // 更新调试面板
         this.debugPanel.update({
@@ -460,7 +461,8 @@ class TongTianLuApp {
         } else if (this.currentState === this.STATE.READY && 
             gesture !== GESTURES.POINTING && 
             gesture !== GESTURES.NONE &&
-            gesture !== GESTURES.PINCH) {
+            gesture !== GESTURES.PINCH &&
+            gesture !== GESTURES.PRAYER) {
             this.updateProgressRing(holdProgress, gesture, screenX, screenY);
         } else {
             this.updateProgressRing(0);
@@ -486,7 +488,16 @@ class TongTianLuApp {
             case this.STATE.CASTING:
                 break;
         }
+        
+        if (gestureResult.isTriggered && gesture === GESTURES.PRAYER) {
+            this.castPurification();
+        }
     }
+
+    castPurification() {
+        const talisman = { element: 'purification', name: '净化符', symbol: '✨' };
+        this.updateHint('✨ 圣光净化！');
+        this.castTalisman(talisman);
 
     _getPalmHoldProgress() {
         if (!this.palmHoldStart) return 0;

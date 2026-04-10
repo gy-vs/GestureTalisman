@@ -17,7 +17,8 @@ class GestureRecognizer {
             THREE: 'three',
             PINCH: 'pinch',
             THUMBS_UP: 'thumbs_up',
-            WAVE: 'wave'
+            WAVE: 'wave',
+            PRAYER: 'prayer'
         };
 
         this.GESTURE_TALISMAN_MAP = {
@@ -27,7 +28,8 @@ class GestureRecognizer {
             [this.GESTURES.ROCK]: { element: 'thunder', name: '雷符', symbol: '💜' },
             [this.GESTURES.THUMBS_UP]: { element: 'wind', name: '风符', symbol: '🌸' },
             [this.GESTURES.FIST]: { element: 'earth', name: '土符', symbol: '🌍' },
-            [this.GESTURES.THREE]: { element: 'wood', name: '木符', symbol: '🌿' }
+            [this.GESTURES.THREE]: { element: 'wood', name: '木符', symbol: '🌿' },
+            [this.GESTURES.PRAYER]: { element: 'purification', name: '净化符', symbol: '✨' }
         };
 
         // 当前状态
@@ -291,7 +293,16 @@ class GestureRecognizer {
         return false;
     }
 
-    recognize(landmarks) {
+    recognize(landmarks, multiLandmarks) {
+        if (multiLandmarks && multiLandmarks.length === 2 && window.HandTracker && window.handTrackerInstance) {
+            if (window.handTrackerInstance.isPrayerGesture(multiLandmarks)) {
+                this.currentGesture = this.GESTURES.PRAYER;
+                this.confidence = 0.95;
+                this.updateHoldTimer(this.GESTURES.PRAYER);
+                return this.getResult();
+            }
+        }
+
         if (!landmarks || landmarks.length !== 21) {
             this.currentGesture = this.GESTURES.NONE;
             this.confidence = 0;
@@ -516,7 +527,8 @@ class GestureRecognizer {
             [this.GESTURES.THREE]: '🌿 三指',
             [this.GESTURES.PINCH]: '🤏 捏合',
             [this.GESTURES.THUMBS_UP]: '👍 点赞',
-            [this.GESTURES.WAVE]: '👋 招手'
+            [this.GESTURES.WAVE]: '👋 招手',
+            [this.GESTURES.PRAYER]: '🙏 双手合十'
         };
         return names[gesture] || '未知';
     }
