@@ -265,6 +265,7 @@ class EffectsManager {
             case 'metal': this.playMetalEffect(); break;
             case 'earth': this.playEarthEffect(); break;
             case 'wind': this.playWindEffect(); break;
+            case 'purification': this.playPurificationEffect(); break;
             default: this.playDefaultEffect(element);
         }
     }
@@ -408,6 +409,74 @@ class EffectsManager {
                 }));
                 this.particleEngine.startAnimation();
             }, i * 120);
+        }
+    }
+
+    // ==================== ✨ 净化符 - 圣光净化 ====================
+    playPurificationEffect() {
+        this.effectContainer.innerHTML = `
+            <div class="effect-purification-scene">
+                <div class="purification-overlay"></div>
+                <div class="purification-center-beam">
+                    <div class="beam-core"></div>
+                    <div class="beam-glow"></div>
+                    <div class="beam-rays">
+                        <div class="ray ray-1"></div>
+                        <div class="ray ray-2"></div>
+                        <div class="ray ray-3"></div>
+                        <div class="ray ray-4"></div>
+                        <div class="ray ray-5"></div>
+                        <div class="ray ray-6"></div>
+                    </div>
+                </div>
+                <div class="purification-particles"></div>
+            </div>
+        `;
+        this.effectContainer.className = 'fullscreen-effect active';
+
+        this.emitPurificationParticles();
+        this.scheduleCleanup(5000);
+    }
+
+    emitPurificationParticles() {
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+        
+        for (let i = 0; i < 50; i++) {
+            setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * 100;
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: centerX + Math.cos(angle) * dist,
+                    y: centerY + Math.sin(angle) * dist,
+                    vx: Math.cos(angle) * (2 + Math.random() * 3),
+                    vy: -2 - Math.random() * 4,
+                    color: Math.random() > 0.5 ? '#FFFFFF' : '#F0F8FF',
+                    size: 3 + Math.random() * 5,
+                    gravity: -0.05,
+                    decay: 0.008,
+                    type: 'circle',
+                    rotationSpeed: (Math.random() - 0.5) * 0.2
+                }));
+                this.particleEngine.startAnimation();
+            }, i * 50);
+        }
+        
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => {
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: centerX + (Math.random() - 0.5) * 200,
+                    y: window.innerHeight,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: -6 - Math.random() * 4,
+                    color: '#E6E6FA',
+                    size: 4 + Math.random() * 6,
+                    gravity: -0.08,
+                    decay: 0.005,
+                    type: 'star'
+                }));
+                this.particleEngine.startAnimation();
+            }, i * 80 + 500);
         }
     }
 
