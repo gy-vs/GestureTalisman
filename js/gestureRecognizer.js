@@ -48,14 +48,22 @@ class GestureRecognizer {
         this.gestureHoldStart = null;
         this.lastGesture = this.GESTURES.NONE;
         this.gestureTriggered = false;
-        
+
         // 手势触发回调
         this.onGestureTriggerCallback = null;
+
+        // 双手合十检测回调
+        this.onPrayerGestureCallback = null;
 
         // 招手检测：手腕 x 坐标历史
         this.wristHistory = [];
         this.waveDetected = false;
         this.waveCooldown = 0;
+
+        // 双手合十检测状态
+        this.prayerHoldStart = null;
+        this.prayerTriggered = false;
+        this.prayerHoldTime = 1500; // 合十保持时间触发(ms)
     }
 
     /**
@@ -139,32 +147,6 @@ class GestureRecognizer {
         if (maxLength === 0) return 0;
         
         return Math.min(d3 / maxLength, 1);
-    }
-
-    /**
-     * 专门检测单指指向手势（更宽松的条件）
-     */
-    isPointingGesture(landmarks) {
-        if (!landmarks) return false;
-        
-        // 食指必须伸展
-        const indexExtended = this.isFingerExtended(landmarks, 8, 6, 5);
-        if (!indexExtended) return false;
-        
-        // 其他三指（中指、无名指、小指）应该弯曲
-        const middleCurled = this.isFingerCurled(landmarks, 12, 10, 9);
-        const ringCurled = this.isFingerCurled(landmarks, 16, 14, 13);
-        const pinkyCurled = this.isFingerCurled(landmarks, 20, 18, 17);
-        
-        // 至少2个其他手指弯曲即可（宽松条件）
-        const curledCount = [middleCurled, ringCurled, pinkyCurled].filter(Boolean).length;
-        
-        // 食指明显高于中指（额外验证）
-        const indexTip = landmarks[8];
-        const middleTip = landmarks[12];
-        const indexHigher = indexTip.y < middleTip.y - 0.03;
-        
-        return curledCount >= 2 || (curledCount >= 1 && indexHigher);
     }
 
     /**
@@ -289,6 +271,160 @@ class GestureRecognizer {
         }
 
         return false;
+    }
+
+    /**
+     * 计算三点构成的平面法向量
+     */
+    getNormalVector(p1, p2, p3) {
+        const v1 = { x: p2.x - p1.x, y: p2.y - p1.y, z: p2.z - p1.z };
+        const v2 = { x: p3.x - p1.x, y: p3.y - p1.y, z: p3.z - p1.z };
+
+        const nx = v1.y * v2.z - v1.z * v2.y;
+        const ny = v1.z * v2.x - v1.x * v2.z;
+        const nz = v1.x * v2.y - v1.y * v2.x;
+
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if (len === 0) return { x: 0, y: 0, z: 1 };
+
+        return { x: nx / len, y: ny / len, z: nz / len };
+    }
+
+    /**
+     * 计算两个向量的夹角（弧度）
+     */
+    getAngleBetween(v1, v2) {
+        const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+        const len1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y + v1.z * v1.z);
+        const len2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y + v2.z * v2.z);
+
+        if (len1 === 0 || len2 === 0) return 0;
+
+        const cosAngle = Math.max(-1, Math.min(1, dot / (len1 * len2)));
+        return Math.acos(cosAngle);
+    }
+
+    /**
+     * 检测双手合十手势
+     * 条件：
+     * 1. 两只手都存在
+     * 2. 双手掌心相对（手腕法向量夹角接近180度）
+     * 3. 指尖朝上（手腕到中指方向向上）
+     * 4. 双手距离较近
+     */
+    detectPrayerGesture(leftHand, rightHand) {
+        if (!leftHand || !rightHand || leftHand.length !== 21 || rightHand.length !== 21) {
+            this.prayerHoldStart = null;
+            return false;
+        }
+
+        // 获取手腕位置
+        const leftWrist = leftHand[0];
+        const rightWrist = rightHand[0];
+
+        // 获取中指根部和指尖（用于判断手掌方向）
+        const leftMiddleMCP = leftHand[9];
+        const leftMiddleTip = leftHand[12];
+        const rightMiddleMCP = rightHand[9];
+        const rightMiddleTip = rightHand[12];
+
+        // 获取食指根部和小指根部（用于计算手掌平面法向量）
+        const leftIndexMCP = leftHand[5];
+        const leftPinkyMCP = leftHand[17];
+        const rightIndexMCP = rightHand[5];
+        const rightPinkyMCP = rightHand[17];
+
+        // 1. 计算双手距离（手腕之间的距离）
+        const handsDistance = this.distance(leftWrist, rightWrist);
+
+        // 计算手的大小作为参考（手腕到中指尖的距离）
+        const leftHandSize = this.distance(leftWrist, leftMiddleTip);
+        const rightHandSize = this.distance(rightWrist, rightMiddleTip);
+        const avgHandSize = (leftHandSize + rightHandSize) / 2;
+
+        // 双手距离应该较近（小于1.5倍手大小）
+        const isCloseEnough = handsDistance < avgHandSize * 1.5;
+
+        // 2. 判断指尖朝上（手腕到中指的向量y分量为负，因为y轴向下）
+        const leftHandUp = leftWrist.y > leftMiddleTip.y;
+        const rightHandUp = rightWrist.y > rightMiddleTip.y;
+        const fingersPointingUp = leftHandUp && rightHandUp;
+
+        // 3. 计算手掌法向量（通过手腕、食指根部、小指根部）
+        const leftNormal = this.getNormalVector(leftWrist, leftIndexMCP, leftPinkyMCP);
+        const rightNormal = this.getNormalVector(rightWrist, rightIndexMCP, rightPinkyMCP);
+
+        // 4. 判断掌心相对（法向量夹角接近180度，即点积接近-1）
+        const normalDot = leftNormal.x * rightNormal.x +
+                          leftNormal.y * rightNormal.y +
+                          leftNormal.z * rightNormal.z;
+        const palmsFacingEachOther = normalDot < -0.3; // 夹角大于约107度
+
+        // 5. 双手都应该处于张开状态（至少4指伸展）
+        const leftExtended = this.countExtendedFingers(leftHand);
+        const rightExtended = this.countExtendedFingers(rightHand);
+        const handsOpen = leftExtended >= 4 && rightExtended >= 4;
+
+        // 综合判断
+        const isPrayer = isCloseEnough && fingersPointingUp && palmsFacingEachOther && handsOpen;
+
+        // 更新合十保持计时
+        const now = Date.now();
+        if (isPrayer) {
+            if (!this.prayerHoldStart) {
+                this.prayerHoldStart = now;
+            }
+
+            const holdDuration = now - this.prayerHoldStart;
+
+            // 触发净化特效
+            if (holdDuration >= this.prayerHoldTime && !this.prayerTriggered) {
+                this.prayerTriggered = true;
+                if (this.onPrayerGestureCallback) {
+                    this.onPrayerGestureCallback();
+                }
+                return true;
+            }
+        } else {
+            this.prayerHoldStart = null;
+            this.prayerTriggered = false;
+        }
+
+        return false;
+    }
+
+    /**
+     * 计算伸展的手指数量
+     */
+    countExtendedFingers(landmarks) {
+        let count = 0;
+        // 拇指
+        if (this.isFingerExtended(landmarks, 4, 3, 2)) count++;
+        // 食指
+        if (this.isFingerExtended(landmarks, 8, 6, 5)) count++;
+        // 中指
+        if (this.isFingerExtended(landmarks, 12, 10, 9)) count++;
+        // 无名指
+        if (this.isFingerExtended(landmarks, 16, 14, 13)) count++;
+        // 小指
+        if (this.isFingerExtended(landmarks, 20, 18, 17)) count++;
+        return count;
+    }
+
+    /**
+     * 获取合十手势保持进度 (0-1)
+     */
+    getPrayerHoldProgress() {
+        if (!this.prayerHoldStart) return 0;
+        const elapsed = Date.now() - this.prayerHoldStart;
+        return Math.min(elapsed / this.prayerHoldTime, 1);
+    }
+
+    /**
+     * 设置双手合十检测回调
+     */
+    onPrayerGesture(callback) {
+        this.onPrayerGestureCallback = callback;
     }
 
     recognize(landmarks) {

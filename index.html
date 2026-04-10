@@ -12,33 +12,66 @@
     
     <!-- MediaPipe Hands (智能加载：检测本地模型，失败则用CDN) -->
     <script>
-        window.MEDIAPIPE_LOCAL = false; // 默认使用CDN
+        window.MEDIAPIPE_LOCAL = false;
         window.MEDIAPIPE_LOADED = { hands: false, camera: false, drawing: false };
-        
-        // 动态加载脚本
+
+        // 动态加载脚本 - 本地优先，失败则回退到CDN
         function loadScript(localPath, cdnPath, key) {
             return new Promise((resolve) => {
-                const script = document.createElement('script');
-                script.onload = function() {
-                    console.log('[MediaPipe] 加载成功:', localPath || cdnPath);
-                    if (localPath && !cdnPath) window.MEDIAPIPE_LOCAL = true;
-                    window.MEDIAPIPE_LOADED[key] = true;
-                    resolve(true);
+                // 先尝试加载本地脚本
+                const localScript = document.createElement('script');
+                let resolved = false;
+
+                const doResolve = (success, isLocal) => {
+                    if (resolved) return;
+                    resolved = true;
+                    if (isLocal) window.MEDIAPIPE_LOCAL = true;
+                    window.MEDIAPIPE_LOADED[key] = success;
+                    resolve(success);
                 };
-                script.onerror = function() {
-                    if (localPath && cdnPath) {
-                        console.log('[MediaPipe] 本地加载失败，尝试CDN:', cdnPath);
-                        script.src = cdnPath;
-                    } else {
-                        console.error('[MediaPipe] 加载失败:', localPath || cdnPath);
-                        resolve(false);
+
+                // 本地脚本加载成功
+                localScript.onload = function() {
+                    console.log('[MediaPipe] 本地加载成功:', localPath);
+                    window.MEDIAPIPE_LOCAL = true;
+                    doResolve(true, true);
+                };
+
+                // 本地脚本加载失败，回退到CDN
+                localScript.onerror = function() {
+                    console.log('[MediaPipe] 本地加载失败:', localPath);
+
+                    if (!cdnPath) {
+                        console.error('[MediaPipe] 无CDN回退路径:', localPath);
+                        doResolve(false, false);
+                        return;
                     }
+
+                    // 移除失败的本地脚本
+                    localScript.remove();
+
+                    // 创建CDN脚本
+                    const cdnScript = document.createElement('script');
+
+                    cdnScript.onload = function() {
+                        console.log('[MediaPipe] CDN加载成功:', cdnPath);
+                        doResolve(true, false);
+                    };
+
+                    cdnScript.onerror = function() {
+                        console.error('[MediaPipe] CDN加载也失败:', cdnPath);
+                        doResolve(false, false);
+                    };
+
+                    cdnScript.src = cdnPath;
+                    document.head.appendChild(cdnScript);
                 };
-                script.src = localPath || cdnPath;
-                document.head.appendChild(script);
+
+                localScript.src = localPath;
+                document.head.appendChild(localScript);
             });
         }
-        
+
         // 按顺序加载 MediaPipe
         (async function() {
             await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js', 'hands');
@@ -271,7 +304,17 @@
                     </div>
                 </div>
                 <div class="tutorial-section">
-                    <div class="tutorial-section__title">🤚 手势召唤 (持续2秒)</div>
+                    <div class="tutorial-section__title">🙏 双手手势 (持续1.5秒)</div>
+                    <div class="tutorial-step">
+                        <div class="tutorial-step__icon">🙏</div>
+                        <div class="tutorial-step__content">
+                            <div class="tutorial-step__title">双手合十 → ✨ 净化特效</div>
+                            <div class="tutorial-step__desc">双手掌心相对、指尖朝上、距离较近</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tutorial-section">
+                    <div class="tutorial-section__title">🤚 单手手势召唤 (持续2秒)</div>
                     <div class="tutorial-step">
                         <div class="tutorial-step__icon">✌️</div>
                         <div class="tutorial-step__content">

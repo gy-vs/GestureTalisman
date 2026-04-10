@@ -720,6 +720,118 @@ class EffectsManager {
         this.scheduleCleanup(3000);
     }
 
+    // ==================== 🙏 净化特效 - 双手合十触发 ====================
+    playPurificationEffect() {
+        this.effectContainer.innerHTML = `
+            <div class="effect-purification-scene">
+                <div class="purification-light-column"></div>
+                <div class="purification-light-core"></div>
+                <div class="purification-particles-container"></div>
+                <div class="purification-halo"></div>
+                <div class="purification-glow-overlay"></div>
+            </div>
+        `;
+        this.effectContainer.className = 'fullscreen-effect active';
+
+        this.emitPurificationParticles();
+        this.scheduleCleanup(5000);
+    }
+
+    emitPurificationParticles() {
+        const centerX = window.innerWidth / 2;
+        const centerY = window.innerHeight / 2;
+
+        // 第一阶段：从屏幕中央升起的光柱粒子
+        for (let i = 0; i < 60; i++) {
+            setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * 30;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.random() * 100;
+
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 1.5,
+                    vy: -3 - Math.random() * 4,
+                    color: Math.random() > 0.3 ? '#FFFFFF' : '#E8F4FF',
+                    size: 4 + Math.random() * 6,
+                    gravity: -0.05,
+                    decay: 0.008,
+                    type: 'circle',
+                    alpha: 0.8 + Math.random() * 0.2
+                }));
+                this.particleEngine.startAnimation();
+            }, i * 30);
+        }
+
+        // 第二阶段：扩散的光环粒子
+        for (let i = 0; i < 40; i++) {
+            setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2 + Math.random() * 4;
+
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: centerX,
+                    y: centerY - 100,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 2,
+                    color: Math.random() > 0.4 ? '#FFFFFF' : '#F0F8FF',
+                    size: 3 + Math.random() * 5,
+                    gravity: 0,
+                    decay: 0.012,
+                    type: 'circle',
+                    alpha: 0.7 + Math.random() * 0.3
+                }));
+                this.particleEngine.startAnimation();
+            }, 800 + i * 40);
+        }
+
+        // 第三阶段：从底部向上汇聚的净化光点
+        for (let i = 0; i < 50; i++) {
+            setTimeout(() => {
+                const x = centerX + (Math.random() - 0.5) * 200;
+                const y = window.innerHeight + 20;
+
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: x,
+                    y: y,
+                    vx: (centerX - x) * 0.01,
+                    vy: -5 - Math.random() * 3,
+                    color: '#FFFFFF',
+                    size: 2 + Math.random() * 4,
+                    gravity: -0.02,
+                    decay: 0.01,
+                    type: 'circle',
+                    alpha: 0.6 + Math.random() * 0.4
+                }));
+                this.particleEngine.startAnimation();
+            }, 1500 + i * 35);
+        }
+
+        // 第四阶段：向外扩散的星芒
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 3 + Math.random() * 5;
+
+                this.particleEngine.addParticle(this.particleEngine.createParticle({
+                    x: centerX,
+                    y: centerY - 150,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    color: '#FFFFFF',
+                    size: 2 + Math.random() * 3,
+                    gravity: 0,
+                    decay: 0.015,
+                    type: 'star',
+                    alpha: 0.8 + Math.random() * 0.2
+                }));
+                this.particleEngine.startAnimation();
+            }, 2500 + i * 50);
+        }
+    }
+
     // ==================== 工具方法 ====================
     
     scheduleCleanup(delay) {

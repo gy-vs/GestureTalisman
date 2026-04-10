@@ -11,17 +11,19 @@ class HandTracker {
         this.isModelReady = false;
         this.landmarks = null;
         this.handedness = null;
+        this.multiHandLandmarks = null; // 存储多只手的landmarks
+        this.multiHandedness = null;    // 存储多只手的handedness
         this.onResultsCallback = null;
         this.onProgressCallback = null;
-        
-        // 配置
+
+        // 配置 - 支持双手检测
         this.config = {
-            maxNumHands: 1,
+            maxNumHands: 2,  // 改为2以支持双手合十检测
             modelComplexity: 1,
             minDetectionConfidence: 0.7,
             minTrackingConfidence: 0.5
         };
-        
+
         // 预热相关
         this.warmupFrameCount = 0;
         this.warmupTarget = 3;
@@ -168,12 +170,17 @@ class HandTracker {
 
     /**
      * 处理MediaPipe结果
-     * @param {Object} results 
+     * @param {Object} results
      */
     processResults(results) {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            this.landmarks = results.multiHandLandmarks[0];
-            this.handedness = results.multiHandedness?.[0]?.label || 'Unknown';
+        // 存储多只手的完整数据
+        this.multiHandLandmarks = results.multiHandLandmarks || [];
+        this.multiHandedness = results.multiHandedness || [];
+
+        // 兼容单手模式：主手仍然是第一只手
+        if (this.multiHandLandmarks.length > 0) {
+            this.landmarks = this.multiHandLandmarks[0];
+            this.handedness = this.multiHandedness[0]?.label || 'Unknown';
         } else {
             this.landmarks = null;
             this.handedness = null;
@@ -184,9 +191,38 @@ class HandTracker {
             this.onResultsCallback({
                 landmarks: this.landmarks,
                 handedness: this.handedness,
-                hasHand: this.landmarks !== null
+                hasHand: this.landmarks !== null,
+                // 新增：传递双手数据
+                multiHandLandmarks: this.multiHandLandmarks,
+                multiHandedness: this.multiHandedness,
+                handCount: this.multiHandLandmarks.length
             });
         }
+    }
+
+    /**
+     * 获取左右手的landmarks
+     * @returns {Object} { left: landmarks|null, right: landmarks|null }
+     */
+    getLeftRightHands() {
+        const result = { left: null, right: null };
+
+        if (!this.multiHandLandmarks || this.multiHandLandmarks.length === 0) {
+            return result;
+        }
+
+        for (let i = 0; i < this.multiHandLandmarks.length; i++) {
+            const landmarks = this.multiHandLandmarks[i];
+            const handedness = this.multiHandedness[i]?.label;
+
+            if (handedness === 'Left') {
+                result.left = landmarks;
+            } else if (handedness === 'Right') {
+                result.right = landmarks;
+            }
+        }
+
+        return result;
     }
 
     /**
