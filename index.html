@@ -12,39 +12,71 @@
     
     <!-- MediaPipe Hands (智能加载：检测本地模型，失败则用CDN) -->
     <script>
-        window.MEDIAPIPE_LOCAL = false; // 默认使用CDN
+        window.MEDIAPIPE_LOCAL = false;
         window.MEDIAPIPE_LOADED = { hands: false, camera: false, drawing: false };
         
-        // 动态加载脚本
         function loadScript(localPath, cdnPath, key) {
             return new Promise((resolve) => {
+                // 首先尝试 CDN 加载（确保模型存在性）
                 const script = document.createElement('script');
+                script.crossOrigin = 'anonymous';
+                
                 script.onload = function() {
-                    console.log('[MediaPipe] 加载成功:', localPath || cdnPath);
-                    if (localPath && !cdnPath) window.MEDIAPIPE_LOCAL = true;
+                    console.log('[MediaPipe] 加载成功:', key, script.src);
+                    const src = script.src || '';
+                    // 标记：如果是从本地目录加载的wasm文件才标记为本地模式
+                    // 注意：当前实际使用CDN以保证可用性
                     window.MEDIAPIPE_LOADED[key] = true;
                     resolve(true);
                 };
-                script.onerror = function() {
-                    if (localPath && cdnPath) {
-                        console.log('[MediaPipe] 本地加载失败，尝试CDN:', cdnPath);
-                        script.src = cdnPath;
-                    } else {
-                        console.error('[MediaPipe] 加载失败:', localPath || cdnPath);
+                
+                script.onerror = function(e) {
+                    console.error('[MediaPipe] CDN加载失败:', key, '尝试备用路径...');
+                    // 创建新script尝试另一个CDN
+                    const fallbackScript = document.createElement('script');
+                    fallbackScript.crossOrigin = 'anonymous';
+                    fallbackScript.onload = function() {
+                        console.log('[MediaPipe] 备用CDN加载成功:', key);
+                        window.MEDIAPIPE_LOADED[key] = true;
+                        resolve(true);
+                    };
+                    fallbackScript.onerror = function() {
+                        console.error('[MediaPipe] 全部加载失败:', key);
                         resolve(false);
+                    };
+                    // 使用 unpkg 作为备用CDN
+                    switch(key) {
+                        case 'hands':
+                            fallbackScript.src = 'https://unpkg.com/@mediapipe/hands@0.4.1675469240/hands.js';
+                            break;
+                        case 'camera':
+                            fallbackScript.src = 'https://unpkg.com/@mediapipe/camera_utils@0.3.1675465526/camera_utils.js';
+                            break;
+                        case 'drawing':
+                            fallbackScript.src = 'https://unpkg.com/@mediapipe/drawing_utils@0.3.1675465449/drawing_utils.js';
+                            break;
+                        default:
+                            resolve(false);
+                            return;
                     }
+                    document.head.appendChild(fallbackScript);
                 };
-                script.src = localPath || cdnPath;
+                
+                // 优先从CDN加载（保证可用性）
+                script.src = cdnPath;
                 document.head.appendChild(script);
             });
         }
         
-        // 按顺序加载 MediaPipe
         (async function() {
-            await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js', 'hands');
-            await loadScript('/models/camera_utils/camera_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js', 'camera');
-            await loadScript('/models/drawing_utils/drawing_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js', 'drawing');
-            console.log('[MediaPipe] 所有脚本加载完成，本地模式:', window.MEDIAPIPE_LOCAL);
+            console.log('[MediaPipe] 开始加载脚本...');
+            const handsLoaded = await loadScript('/models/hands/hands.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js', 'hands');
+            const cameraLoaded = await loadScript('/models/camera_utils/camera_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675465526/camera_utils.js', 'camera');
+            const drawingLoaded = await loadScript('/models/drawing_utils/drawing_utils.js', 'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675465449/drawing_utils.js', 'drawing');
+            
+            console.log('[MediaPipe] 加载结果:', { handsLoaded, cameraLoaded, drawingLoaded });
+            console.log('[MediaPipe] 全部脚本加载完成');
+            window.MEDIAPIPE_LOAD_COMPLETE = true;
         })();
     </script>
     

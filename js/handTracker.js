@@ -16,11 +16,14 @@ class HandTracker {
         
         // 配置
         this.config = {
-            maxNumHands: 1,
+            maxNumHands: 2,
             modelComplexity: 1,
             minDetectionConfidence: 0.7,
             minTrackingConfidence: 0.5
         };
+        
+        this.multiLandmarks = [];
+        this.multiHandedness = [];
         
         // 预热相关
         this.warmupFrameCount = 0;
@@ -39,17 +42,15 @@ class HandTracker {
      * 获取模型文件路径（本地优先，CDN备用）
      */
     _getModelPath(file) {
-        // 检查是否有本地模型（Docker环境或本地已下载）
         const useLocal = window.MEDIAPIPE_LOCAL === true;
         
         if (useLocal) {
-            // 本地绝对路径
             const path = `/models/hands/${file}`;
             console.log(`[HandTracker] 使用本地模型: ${path}`);
             return path;
         } else {
-            // CDN 路径
-            const path = `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            // 使用指定版本号的CDN，确保兼容性
+            const path = `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
             console.log(`[HandTracker] 使用CDN模型: ${path}`);
             return path;
         }
@@ -171,22 +172,35 @@ class HandTracker {
      * @param {Object} results 
      */
     processResults(results) {
-        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-            this.landmarks = results.multiHandLandmarks[0];
-            this.handedness = results.multiHandedness?.[0]?.label || 'Unknown';
+        this.multiLandmarks = results.multiHandLandmarks || [];
+        this.multiHandedness = results.multiHandedness || [];
+        
+        if (this.multiLandmarks.length > 0) {
+            this.landmarks = this.multiLandmarks[0];
+            this.handedness = this.multiHandedness?.[0]?.label || 'Unknown';
         } else {
             this.landmarks = null;
             this.handedness = null;
         }
 
-        // 调用回调
         if (this.onResultsCallback) {
             this.onResultsCallback({
                 landmarks: this.landmarks,
                 handedness: this.handedness,
-                hasHand: this.landmarks !== null
+                hasHand: this.landmarks !== null,
+                multiLandmarks: this.multiLandmarks,
+                multiHandedness: this.multiHandedness,
+                handCount: this.multiLandmarks.length
             });
         }
+    }
+
+    getMultiLandmarks() {
+        return this.multiLandmarks;
+    }
+
+    getHandCount() {
+        return this.multiLandmarks.length;
     }
 
     /**

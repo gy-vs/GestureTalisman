@@ -358,17 +358,17 @@ class TongTianLuApp {
      * 处理手部识别结果
      */
     processHandResults(results) {
-        const { landmarks, hasHand } = results;
+        const { landmarks, hasHand, multiLandmarks } = results;
         
         // 绘制骨架
         if (hasHand && this.debugPanel.shouldShowSkeleton()) {
-            this.drawSkeleton(landmarks);
+            this.drawBothHandsSkeletons(multiLandmarks);
         } else {
             this.skeletonCtx.clearRect(0, 0, this.skeletonCanvas.width, this.skeletonCanvas.height);
         }
         
         // 识别手势
-        const gestureResult = this.gestureRecognizer.recognize(landmarks);
+        const gestureResult = this.gestureRecognizer.recognize(landmarks, multiLandmarks);
         
         // 更新调试面板
         this.debugPanel.update({
@@ -381,7 +381,7 @@ class TongTianLuApp {
         
         // 处理手势
         if (hasHand) {
-            this.handleGesture(gestureResult, landmarks);
+            this.handleGesture(gestureResult, landmarks, multiLandmarks);
         } else {
             this.handleNoHand();
         }
@@ -439,17 +439,82 @@ class TongTianLuApp {
         ctx.shadowBlur = 0;
     }
 
+    drawBothHandsSkeletons(multiLandmarks) {
+        const ctx = this.skeletonCtx;
+        const w = this.skeletonCanvas.width;
+        const h = this.skeletonCanvas.height;
+        ctx.clearRect(0, 0, w, h);
+        
+        if (!multiLandmarks || multiLandmarks.length === 0) return;
+        
+        const colors = ['#00D4FF', '#FF6B6B'];
+        multiLandmarks.forEach((landmarks, idx) => {
+            this.drawSingleHandSkeleton(ctx, landmarks, w, h, colors[idx % colors.length]);
+        });
+    }
+
+    drawSingleHandSkeleton(ctx, landmarks, w, h, strokeColor) {
+        const connections = [
+            [0, 1], [1, 2], [2, 3], [3, 4],
+            [0, 5], [5, 6], [6, 7], [7, 8],
+            [0, 9], [9, 10], [10, 11], [11, 12],
+            [0, 13], [13, 14], [14, 15], [15, 16],
+            [0, 17], [17, 18], [18, 19], [19, 20],
+            [5, 9], [9, 13], [13, 17]
+        ];
+        
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+        ctx.shadowColor = strokeColor;
+        ctx.shadowBlur = 5;
+        
+        connections.forEach(([i, j]) => {
+            const p1 = landmarks[i];
+            const p2 = landmarks[j];
+            const x1 = (1 - p1.x) * w;
+            const y1 = p1.y * h;
+            const x2 = (1 - p2.x) * w;
+            const y2 = p2.y * h;
+            
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        });
+        
+        ctx.fillStyle = strokeColor;
+        landmarks.forEach((p, i) => {
+            const x = (1 - p.x) * w;
+            const y = p.y * h;
+            const radius = [4, 8, 12, 16, 20].includes(i) ? 6 : 4;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        
+        ctx.shadowBlur = 0;
+    }
+
     /**
      * 处理手势
      */
-    handleGesture(gestureResult, landmarks) {
+    handleGesture(gestureResult, landmarks, multiLandmarks) {
         const { gesture, holdProgress } = gestureResult;
         const GESTURES = this.gestureRecognizer.GESTURES;
         const indexTip = landmarks[8];
-        const palmCenter = landmarks[0];
         
-        const screenX = (1 - palmCenter.x) * this.skeletonCanvas.width;
-        const screenY = palmCenter.y * this.skeletonCanvas.height;
+        let screenX, screenY;
+        if (gesture === GESTURES.PRAYER && multiLandmarks.length === 2) {
+            const centerX = (1 - (multiLandmarks[0][0].x + multiLandmarks[1][0].x) / 2) * this.skeletonCanvas.width;
+            const centerY = ((multiLandmarks[0][0].y + multiLandmarks[1][0].y) / 2) * this.skeletonCanvas.height;
+            screenX = centerX;
+            screenY = centerY;
+        } else {
+            const palmCenter = landmarks[0];
+            screenX = (1 - palmCenter.x) * this.skeletonCanvas.width;
+            screenY = palmCenter.y * this.skeletonCanvas.height;
+        }
 
         if (this.currentState === this.STATE.TALISMAN_RING || 
             this.currentState === this.STATE.TALISMAN_PICKED) {
@@ -507,7 +572,7 @@ class TongTianLuApp {
                 this.palmHoldStart = null;
                 this.showTalismanRing();
             }
-        } else {
+        } else if (gesture !== GESTURES.PRAYER) {
             this.palmHoldStart = null;
         }
     }
@@ -729,7 +794,8 @@ class TongTianLuApp {
             earth: { main: '#8B4513', accent: '#CD853F', bg: '#FFF8DC' },
             ice: { main: '#00CED1', accent: '#E0FFFF', bg: '#F0FFFF' },
             thunder: { main: '#8B008B', accent: '#9400D3', bg: '#F8F0FF' },
-            wind: { main: '#FF69B4', accent: '#FFB6C1', bg: '#FFF0F5' }
+            wind: { main: '#FF69B4', accent: '#FFB6C1', bg: '#FFF0F5' },
+            purify: { main: '#FFFFFF', accent: '#E0FFFF', bg: '#FFFAFA' }
         };
         
         const c = colors[talisman.element] || colors.fire;
